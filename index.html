@@ -3,9 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Ragdoll vs White Dog (Final V14)</title>
+    <title>Ragdoll vs White Dog (Silent Menu V15.2)</title>
     <style>
-        body { margin: 0; overflow: hidden; background-color: #87CEEB; font-family: 'Comic Sans MS', 'Arial Rounded MT Bold', sans-serif; user-select: none; }
+        body { margin: 0; overflow: hidden; background-color: #87CEEB; font-family: 'Comic Sans MS', 'Arial Rounded MT Bold', sans-serif; user-select: none; touch-action: none; }
         
         #error-console {
             position: fixed; top: 0; left: 0; width: 100%; background: rgba(255,0,0,0.8); color: white;
@@ -23,13 +23,19 @@
         .hidden { display: none !important; opacity: 0; }
         
         h1 {
-            color: #fff; font-size: 40px; margin: 0 0 20px 0;
+            color: #fff; font-size: 40px; margin: 0 0 10px 0;
             text-shadow: 3px 3px 0 #336699; letter-spacing: 2px;
             animation: bounce 2s infinite; text-align: center;
         }
         @media (min-width: 800px) { h1 { font-size: 60px; } }
 
         @keyframes bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
+
+        #player-badge {
+            background: #fff; color: #336699; padding: 5px 15px; border-radius: 20px;
+            font-size: 16px; margin-bottom: 20px; font-weight: bold;
+            box-shadow: 0 3px 0 #ccc;
+        }
 
         .btn {
             background: #ffaa00; border: 4px solid #fff; border-radius: 50px;
@@ -55,7 +61,6 @@
             margin-bottom: 15px;
         }
         
-        /* ★★★ 新增：操作说明样式 ★★★ */
         .instructions-box {
             background: rgba(0, 0, 0, 0.2);
             padding: 10px 20px;
@@ -84,6 +89,7 @@
         #leaderboard-list { overflow-y: auto; flex-grow: 1; }
         .score-item { display: flex; justify-content: space-between; margin: 3px 0; color: #555; font-size: 13px; padding: 2px 5px;}
         .score-item:nth-child(odd) { background: #f0f8ff; }
+        .score-item.mine { background: #fff8e1; border: 1px solid #ffcc00; } 
 
         #hud { position: absolute; top: 20px; left: 20px; z-index: 10; pointer-events: none; }
         #score-display { font-size: 30px; color: #336699; font-weight: bold; text-shadow: 2px 2px 0 #fff; }
@@ -102,6 +108,9 @@
 
     <div id="start-screen" class="ui-screen">
         <h1>猫狗大作战</h1>
+        
+        <div id="player-badge">👤 身份: <span id="player-name-display">...</span></div>
+
         <div id="loading-text">正在初始化游戏引擎...</div>
         <div id="menu-content" style="display:none; text-align:center;">
             
@@ -116,11 +125,11 @@
 
             <div class="instructions-box">
                 <div>💻 电脑：按 <span class="key-badge">←</span> <span class="key-badge">→</span> 键移动</div>
-                <div>📱 手机：点击屏幕 <span class="key-badge">左侧</span> / <span class="key-badge">右侧</span></div>
+                <div>📱 手机：按住屏幕 <span class="key-badge">↔</span> 左右滑动</div>
             </div>
 
             <div class="leaderboard-box" style="margin-top: 15px;">
-                <h3>🏆 历史高分榜</h3>
+                <h3>🏆 本地高分榜</h3>
                 <div class="lb-tabs">
                     <div id="tab-easy" class="lb-tab">🐣 简单</div>
                     <div id="tab-medium" class="lb-tab active">😎 普通</div>
@@ -154,7 +163,9 @@
 
         import * as THREE from 'three';
 
-        const STORAGE_KEY = 'ragdoll_vs_whitedog_scores_v14'; 
+        // 数据KEY更新，避免读取旧缓存
+        const STORAGE_KEY = 'ragdoll_vs_whitedog_scores_v15_2'; 
+        const PLAYER_NAME_KEY = 'ragdoll_player_name';
 
         let scene, camera, renderer, player, gridHelper, ground;
         let obstacles = [];
@@ -164,6 +175,9 @@
         let nextSpawnZ = -50; 
         let animationId;
         
+        let playerName = "Player";
+        let touchStartX = 0;
+
         let currentDifficulty = 'medium';
         let leaderboardTab = 'medium'; 
 
@@ -177,6 +191,7 @@
         let clock = new THREE.Clock();
 
         try {
+            initPlayerName();
             initScene();
             setupEventListeners();
             document.getElementById('loading-text').style.display = 'none';
@@ -188,7 +203,19 @@
             document.getElementById('error-console').innerText = "启动失败: " + err.message;
         }
 
+        function initPlayerName() {
+            let storedName = localStorage.getItem(PLAYER_NAME_KEY);
+            if (!storedName) {
+                const randomId = Math.floor(1000 + Math.random() * 9000);
+                storedName = `Player${randomId}`;
+                localStorage.setItem(PLAYER_NAME_KEY, storedName);
+            }
+            playerName = storedName;
+            document.getElementById('player-name-display').innerText = playerName;
+        }
+
         function setupEventListeners() {
+            // ★★★ 确保这里只调用 selectDifficulty，没有任何 playSound ★★★
             document.getElementById('btn-easy').addEventListener('click', () => selectDifficulty('easy', document.getElementById('btn-easy')));
             document.getElementById('btn-medium').addEventListener('click', () => selectDifficulty('medium', document.getElementById('btn-medium')));
             document.getElementById('btn-hard').addEventListener('click', () => selectDifficulty('hard', document.getElementById('btn-hard')));
@@ -197,35 +224,46 @@
             document.getElementById('tab-medium').addEventListener('click', () => switchLeaderboardTab('medium', document.getElementById('tab-medium')));
             document.getElementById('tab-hard').addEventListener('click', () => switchLeaderboardTab('hard', document.getElementById('tab-hard')));
 
+            // 只有这里（开始游戏）和返回菜单才会有声音
             document.getElementById('btn-start').addEventListener('click', startGame);
             document.getElementById('btn-restart').addEventListener('click', returnToMenu);
             
             document.addEventListener('keydown', e => keys[e.code] = true);
             document.addEventListener('keyup', e => keys[e.code] = false);
 
-            // ★★★ 核心新增：手机触摸控制 ★★★
-            document.addEventListener('touchstart', handleTouch, {passive: false});
-            document.addEventListener('touchend', () => {
-                keys.ArrowLeft = false;
-                keys.ArrowRight = false;
-            });
+            document.addEventListener('touchstart', handleTouchStart, {passive: false});
+            document.addEventListener('touchmove', handleTouchMove, {passive: false});
+            document.addEventListener('touchend', handleTouchEnd);
 
             updateLeaderboardUI();
         }
 
-        function handleTouch(e) {
+        function handleTouchStart(e) {
             if(!gameActive) return;
-            e.preventDefault(); 
-            const touchX = e.touches[0].clientX;
-            const screenWidth = window.innerWidth;
+            touchStartX = e.touches[0].clientX;
+        }
 
-            if (touchX < screenWidth / 2) {
+        function handleTouchMove(e) {
+            if(!gameActive) return;
+            e.preventDefault();
+            const currentX = e.touches[0].clientX;
+            const deltaX = currentX - touchStartX;
+            
+            if (deltaX > 10) {
+                keys.ArrowRight = true;
+                keys.ArrowLeft = false;
+            } else if (deltaX < -10) {
                 keys.ArrowLeft = true;
                 keys.ArrowRight = false;
             } else {
                 keys.ArrowLeft = false;
-                keys.ArrowRight = true;
+                keys.ArrowRight = false;
             }
+        }
+
+        function handleTouchEnd() {
+            keys.ArrowLeft = false;
+            keys.ArrowRight = false;
         }
 
         function initScene() {
@@ -452,6 +490,7 @@
             updateLeaderboardUI(); resetGame(); renderer.render(scene, camera);
         }
 
+        // ★★★ 核心检查：这个函数里绝对没有任何 playSound ★★★
         function selectDifficulty(level, btnElement) {
             currentDifficulty = level;
             document.querySelectorAll('.diff-btn').forEach(btn => btn.classList.remove('selected'));
@@ -486,7 +525,12 @@
                 .filter(item => item.diff === currentDifficulty)
                 .reduce((max, item) => Math.max(max, item.score), 0);
             const isNewRecord = newScore > currentDiffBest;
-            history.push({ score: newScore, date: dateStr, diff: currentDifficulty });
+            history.push({ 
+                score: newScore, 
+                date: dateStr, 
+                diff: currentDifficulty, 
+                name: playerName 
+            });
             if (history.length > 200) history = history.slice(history.length - 200);
             localStorage.setItem(STORAGE_KEY, JSON.stringify(history));
             return isNewRecord;
@@ -504,7 +548,15 @@
             let html = '';
             filteredHistory.slice(0, 10).forEach((item, index) => {
                 const rankIcon = index === 0 ? '🥇' : (index === 1 ? '🥈' : (index === 2 ? '🥉' : index + 1 + '.'));
-                html += `<div class="score-item"><span style="width: 130px;">${rankIcon} ${item.date}</span><span style="font-weight:bold; color:#336699;">${item.score}m</span></div>`;
+                const nameDisplay = item.name || 'Anonymous';
+                const isMine = item.name === playerName ? 'mine' : '';
+                
+                html += `
+                    <div class="score-item ${isMine}">
+                        <span style="flex:1;">${rankIcon} ${nameDisplay}</span>
+                        <span style="font-weight:bold; color:#336699;">${item.score}m</span>
+                    </div>
+                `;
             });
             listEl.innerHTML = html;
         }
