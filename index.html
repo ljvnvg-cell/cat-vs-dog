@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Ragdoll vs White Dog (Easy Default V15.3)</title>
+    <title>Ragdoll vs White Dog (Audio Fix V15.4)</title>
     <style>
         body { margin: 0; overflow: hidden; background-color: #87CEEB; font-family: 'Comic Sans MS', 'Arial Rounded MT Bold', sans-serif; user-select: none; touch-action: none; }
         
@@ -102,9 +102,9 @@
 <body>
     <div id="error-console"></div>
 
-    <audio id="bgm" loop><source src="bgm.mp3" type="audio/mp3"></audio>
-    <audio id="sfx-start"><source src="start.mp3" type="audio/mp3"></audio>
-    <audio id="sfx-crash"><source src="crash.mp3" type="audio/mp3"></audio>
+    <audio id="bgm" loop preload="auto"><source src="bgm.mp3" type="audio/mp3"></audio>
+    <audio id="sfx-start" preload="auto"><source src="start.mp3" type="audio/mp3"></audio>
+    <audio id="sfx-crash" preload="auto"><source src="crash.mp3" type="audio/mp3"></audio>
 
     <div id="start-screen" class="ui-screen">
         <h1>猫狗大作战</h1>
@@ -163,7 +163,6 @@
 
         import * as THREE from 'three';
 
-        // 数据KEY保持不变，避免丢失刚生成的名字
         const STORAGE_KEY = 'ragdoll_vs_whitedog_scores_v15_2'; 
         const PLAYER_NAME_KEY = 'ragdoll_player_name';
 
@@ -177,8 +176,8 @@
         
         let playerName = "Player";
         let touchStartX = 0;
+        let audioUnlocked = false; // ★ 标记音频是否已解锁
 
-        // ★★★ 核心更新：默认设为 'easy' ★★★
         let currentDifficulty = 'easy';
         let leaderboardTab = 'easy'; 
 
@@ -234,7 +233,34 @@
             document.addEventListener('touchmove', handleTouchMove, {passive: false});
             document.addEventListener('touchend', handleTouchEnd);
 
+            // ★★★ 核心修复：监听任意点击或触摸，强制解锁音频 ★★★
+            document.body.addEventListener('touchstart', unlockAudio, { once: true });
+            document.body.addEventListener('click', unlockAudio, { once: true });
+
             updateLeaderboardUI();
+        }
+
+        // ★★★ 音频解锁函数 ★★★
+        function unlockAudio() {
+            if (audioUnlocked) return;
+            const sounds = ['bgm', 'sfx-start', 'sfx-crash'];
+            sounds.forEach(id => {
+                const audio = document.getElementById(id);
+                if(audio) {
+                    // 播放一瞬间然后暂停，告诉浏览器“用户允许了”
+                    audio.volume = 0; // 先静音
+                    audio.play().then(() => {
+                        audio.pause();
+                        audio.currentTime = 0;
+                        // 恢复音量 (BGM小一点)
+                        if(id === 'bgm') audio.volume = 0.5;
+                        else audio.volume = 1.0;
+                    }).catch(e => {
+                        console.log("Audio unlock waiting...");
+                    });
+                }
+            });
+            audioUnlocked = true;
         }
 
         function handleTouchStart(e) {
@@ -372,6 +398,9 @@
         }
 
         function startGame() {
+            // 确保再尝试一次解锁，以防万一
+            unlockAudio();
+            
             playSound('sfx-start');
             playMusic('bgm');
             document.getElementById('start-screen').classList.add('hidden');
