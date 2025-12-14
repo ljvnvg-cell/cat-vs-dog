@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Ragdoll vs White Dog (Silent Menu V15.2)</title>
+    <title>Ragdoll vs White Dog (Easy Default V15.3)</title>
     <style>
         body { margin: 0; overflow: hidden; background-color: #87CEEB; font-family: 'Comic Sans MS', 'Arial Rounded MT Bold', sans-serif; user-select: none; touch-action: none; }
         
@@ -116,8 +116,8 @@
             
             <div style="color: #336699; margin-bottom: 5px; font-weight: bold;">选择难度</div>
             <div class="difficulty-group">
-                <button id="btn-easy" class="diff-btn">🐣 简单</button>
-                <button id="btn-medium" class="diff-btn selected">😎 普通</button>
+                <button id="btn-easy" class="diff-btn selected">🐣 简单</button>
+                <button id="btn-medium" class="diff-btn">😎 普通</button>
                 <button id="btn-hard" class="diff-btn">🔥 困难</button>
             </div>
             
@@ -131,8 +131,8 @@
             <div class="leaderboard-box" style="margin-top: 15px;">
                 <h3>🏆 本地高分榜</h3>
                 <div class="lb-tabs">
-                    <div id="tab-easy" class="lb-tab">🐣 简单</div>
-                    <div id="tab-medium" class="lb-tab active">😎 普通</div>
+                    <div id="tab-easy" class="lb-tab active">🐣 简单</div>
+                    <div id="tab-medium" class="lb-tab">😎 普通</div>
                     <div id="tab-hard" class="lb-tab">🔥 困难</div>
                 </div>
                 <div id="leaderboard-list">加载中...</div>
@@ -163,7 +163,7 @@
 
         import * as THREE from 'three';
 
-        // 数据KEY更新，避免读取旧缓存
+        // 数据KEY保持不变，避免丢失刚生成的名字
         const STORAGE_KEY = 'ragdoll_vs_whitedog_scores_v15_2'; 
         const PLAYER_NAME_KEY = 'ragdoll_player_name';
 
@@ -178,8 +178,9 @@
         let playerName = "Player";
         let touchStartX = 0;
 
-        let currentDifficulty = 'medium';
-        let leaderboardTab = 'medium'; 
+        // ★★★ 核心更新：默认设为 'easy' ★★★
+        let currentDifficulty = 'easy';
+        let leaderboardTab = 'easy'; 
 
         const difficultySettings = {
             easy: { startSpeed: 0.2, acc: 0.0001, spawnDist: 15 },
@@ -215,7 +216,6 @@
         }
 
         function setupEventListeners() {
-            // ★★★ 确保这里只调用 selectDifficulty，没有任何 playSound ★★★
             document.getElementById('btn-easy').addEventListener('click', () => selectDifficulty('easy', document.getElementById('btn-easy')));
             document.getElementById('btn-medium').addEventListener('click', () => selectDifficulty('medium', document.getElementById('btn-medium')));
             document.getElementById('btn-hard').addEventListener('click', () => selectDifficulty('hard', document.getElementById('btn-hard')));
@@ -224,7 +224,6 @@
             document.getElementById('tab-medium').addEventListener('click', () => switchLeaderboardTab('medium', document.getElementById('tab-medium')));
             document.getElementById('tab-hard').addEventListener('click', () => switchLeaderboardTab('hard', document.getElementById('tab-hard')));
 
-            // 只有这里（开始游戏）和返回菜单才会有声音
             document.getElementById('btn-start').addEventListener('click', startGame);
             document.getElementById('btn-restart').addEventListener('click', returnToMenu);
             
@@ -490,7 +489,6 @@
             updateLeaderboardUI(); resetGame(); renderer.render(scene, camera);
         }
 
-        // ★★★ 核心检查：这个函数里绝对没有任何 playSound ★★★
         function selectDifficulty(level, btnElement) {
             currentDifficulty = level;
             document.querySelectorAll('.diff-btn').forEach(btn => btn.classList.remove('selected'));
