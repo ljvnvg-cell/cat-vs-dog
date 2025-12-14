@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Ragdoll vs White Dog (Final V14)</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #87CEEB; font-family: 'Comic Sans MS', 'Arial Rounded MT Bold', sans-serif; user-select: none; }
+        
+        #error-console {
+            position: fixed; top: 0; left: 0; width: 100%; background: rgba(255,0,0,0.8); color: white;
+            padding: 10px; z-index: 1000; font-family: monospace; display: none;
+        }
+
+        canvas { position: absolute; top: 0; left: 0; z-index: 0; }
+
+        .ui-screen {
+            position: absolute; width: 100%; height: 100%;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            background: rgba(135, 206, 235, 0.85); backdrop-filter: blur(5px);
+            z-index: 20; transition: opacity 0.5s;
+        }
+        .hidden { display: none !important; opacity: 0; }
+        
+        h1 {
+            color: #fff; font-size: 40px; margin: 0 0 20px 0;
+            text-shadow: 3px 3px 0 #336699; letter-spacing: 2px;
+            animation: bounce 2s infinite; text-align: center;
+        }
+        @media (min-width: 800px) { h1 { font-size: 60px; } }
+
+        @keyframes bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
+
+        .btn {
+            background: #ffaa00; border: 4px solid #fff; border-radius: 50px;
+            padding: 15px 40px; margin: 10px; font-size: 20px; color: #fff; font-weight: bold;
+            cursor: pointer; box-shadow: 0 5px 0 #cc8800; transition: transform 0.1s, box-shadow 0.1s;
+            position: relative; z-index: 30;
+        }
+        .btn:active { transform: translateY(5px); box-shadow: 0 0 0 #cc8800; }
+        
+        .difficulty-group { display: flex; gap: 10px; margin-bottom: 10px; }
+        .diff-btn { 
+            padding: 8px 15px; font-size: 16px; opacity: 0.6; border: 3px solid #fff; 
+            background: #66ccff; box-shadow: 0 4px 0 #3399cc;
+            cursor: pointer; position: relative; z-index: 30;
+        }
+        .diff-btn.selected { opacity: 1; transform: scale(1.1); background: #3388ff; border-color: #ffcc00; }
+
+        .leaderboard-box {
+            background: #fff; border: 4px solid #336699; border-radius: 15px;
+            padding: 10px; width: 300px; max-height: 180px;
+            box-shadow: 5px 5px 0 rgba(0,0,0,0.1); text-align: left;
+            position: relative; z-index: 30; display: flex; flex-direction: column;
+            margin-bottom: 15px;
+        }
+        
+        /* ★★★ 新增：操作说明样式 ★★★ */
+        .instructions-box {
+            background: rgba(0, 0, 0, 0.2);
+            padding: 10px 20px;
+            border-radius: 10px;
+            color: #fff;
+            font-size: 14px;
+            text-align: center;
+            line-height: 1.8;
+            border: 2px dashed rgba(255,255,255,0.5);
+        }
+        .key-badge {
+            background: rgba(255,255,255,0.3);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-weight: bold;
+            margin: 0 2px;
+        }
+
+        .lb-tabs { display: flex; justify-content: center; margin-bottom: 5px; border-bottom: 2px dashed #ddd; padding-bottom: 5px;}
+        .lb-tab {
+            padding: 5px 8px; margin: 0 3px; cursor: pointer; font-size: 14px; color: #888; border-radius: 8px 8px 0 0;
+            background: #eef; border: 2px solid transparent; border-bottom: none;
+        }
+        .lb-tab.active { color: #336699; font-weight: bold; background: #fff; border-color: #336699; }
+        
+        #leaderboard-list { overflow-y: auto; flex-grow: 1; }
+        .score-item { display: flex; justify-content: space-between; margin: 3px 0; color: #555; font-size: 13px; padding: 2px 5px;}
+        .score-item:nth-child(odd) { background: #f0f8ff; }
+
+        #hud { position: absolute; top: 20px; left: 20px; z-index: 10; pointer-events: none; }
+        #score-display { font-size: 30px; color: #336699; font-weight: bold; text-shadow: 2px 2px 0 #fff; }
+        #loading-text { font-size: 20px; color: #fff; margin-bottom: 20px; }
+    </style>
+    <script type="importmap">
+        { "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js" } }
+    </script>
+</head>
+<body>
+    <div id="error-console"></div>
+
+    <audio id="bgm" loop><source src="bgm.mp3" type="audio/mp3"></audio>
+    <audio id="sfx-start"><source src="start.mp3" type="audio/mp3"></audio>
+    <audio id="sfx-crash"><source src="crash.mp3" type="audio/mp3"></audio>
+
+    <div id="start-screen" class="ui-screen">
+        <h1>猫狗大作战</h1>
+        <div id="loading-text">正在初始化游戏引擎...</div>
+        <div id="menu-content" style="display:none; text-align:center;">
+            
+            <div style="color: #336699; margin-bottom: 5px; font-weight: bold;">选择难度</div>
+            <div class="difficulty-group">
+                <button id="btn-easy" class="diff-btn">🐣 简单</button>
+                <button id="btn-medium" class="diff-btn selected">😎 普通</button>
+                <button id="btn-hard" class="diff-btn">🔥 困难</button>
+            </div>
+            
+            <button id="btn-start" class="btn">开始游戏 ▶</button>
+
+            <div class="instructions-box">
+                <div>💻 电脑：按 <span class="key-badge">←</span> <span class="key-badge">→</span> 键移动</div>
+                <div>📱 手机：点击屏幕 <span class="key-badge">左侧</span> / <span class="key-badge">右侧</span></div>
+            </div>
+
+            <div class="leaderboard-box" style="margin-top: 15px;">
+                <h3>🏆 历史高分榜</h3>
+                <div class="lb-tabs">
+                    <div id="tab-easy" class="lb-tab">🐣 简单</div>
+                    <div id="tab-medium" class="lb-tab active">😎 普通</div>
+                    <div id="tab-hard" class="lb-tab">🔥 困难</div>
+                </div>
+                <div id="leaderboard-list">加载中...</div>
+            </div>
+        </div>
+    </div>
+
+    <div id="game-over-screen" class="ui-screen hidden">
+        <h1 style="color: #ff6600; text-shadow: 4px 4px 0 #fff;">被小狗抓住了!</h1>
+        <div style="font-size: 24px; color: #336699; margin-bottom: 20px;">
+            本局得分: <span id="final-score" style="font-weight: bold; font-size: 40px;">0</span>
+            <div id="new-record-hint" style="font-size: 16px; color: #ffaa00; display:none; margin-top:5px;">✨ 新纪录! ✨</div>
+        </div>
+        <button id="btn-restart" class="btn">返回主菜单 🏠</button>
+    </div>
+
+    <div id="hud" class="hidden">
+        <div id="score-display">SCORE: 0</div>
+    </div>
+
+    <script type="module">
+        window.onerror = function(msg, url, line) {
+            const errDiv = document.getElementById('error-console');
+            errDiv.style.display = 'block';
+            errDiv.innerHTML += `❌ Error: ${msg} (Line ${line})<br>`;
+            return false;
+        };
+
+        import * as THREE from 'three';
+
+        const STORAGE_KEY = 'ragdoll_vs_whitedog_scores_v14'; 
+
+        let scene, camera, renderer, player, gridHelper, ground;
+        let obstacles = [];
+        let gameActive = false;
+        let score = 0;
+        let speed = 0;
+        let nextSpawnZ = -50; 
+        let animationId;
+        
+        let currentDifficulty = 'medium';
+        let leaderboardTab = 'medium'; 
+
+        const difficultySettings = {
+            easy: { startSpeed: 0.2, acc: 0.0001, spawnDist: 15 },
+            medium: { startSpeed: 0.4, acc: 0.0003, spawnDist: 12 },
+            hard: { startSpeed: 0.55, acc: 0.0004, spawnDist: 11 } 
+        };
+
+        const keys = { ArrowLeft: false, ArrowRight: false };
+        let clock = new THREE.Clock();
+
+        try {
+            initScene();
+            setupEventListeners();
+            document.getElementById('loading-text').style.display = 'none';
+            document.getElementById('menu-content').style.display = 'block';
+            renderer.render(scene, camera);
+        } catch (err) {
+            console.error(err);
+            document.getElementById('error-console').style.display = 'block';
+            document.getElementById('error-console').innerText = "启动失败: " + err.message;
+        }
+
+        function setupEventListeners() {
+            document.getElementById('btn-easy').addEventListener('click', () => selectDifficulty('easy', document.getElementById('btn-easy')));
+            document.getElementById('btn-medium').addEventListener('click', () => selectDifficulty('medium', document.getElementById('btn-medium')));
+            document.getElementById('btn-hard').addEventListener('click', () => selectDifficulty('hard', document.getElementById('btn-hard')));
+
+            document.getElementById('tab-easy').addEventListener('click', () => switchLeaderboardTab('easy', document.getElementById('tab-easy')));
+            document.getElementById('tab-medium').addEventListener('click', () => switchLeaderboardTab('medium', document.getElementById('tab-medium')));
+            document.getElementById('tab-hard').addEventListener('click', () => switchLeaderboardTab('hard', document.getElementById('tab-hard')));
+
+            document.getElementById('btn-start').addEventListener('click', startGame);
+            document.getElementById('btn-restart').addEventListener('click', returnToMenu);
+            
+            document.addEventListener('keydown', e => keys[e.code] = true);
+            document.addEventListener('keyup', e => keys[e.code] = false);
+
+            // ★★★ 核心新增：手机触摸控制 ★★★
+            document.addEventListener('touchstart', handleTouch, {passive: false});
+            document.addEventListener('touchend', () => {
+                keys.ArrowLeft = false;
+                keys.ArrowRight = false;
+            });
+
+            updateLeaderboardUI();
+        }
+
+        function handleTouch(e) {
+            if(!gameActive) return;
+            e.preventDefault(); 
+            const touchX = e.touches[0].clientX;
+            const screenWidth = window.innerWidth;
+
+            if (touchX < screenWidth / 2) {
+                keys.ArrowLeft = true;
+                keys.ArrowRight = false;
+            } else {
+                keys.ArrowLeft = false;
+                keys.ArrowRight = true;
+            }
+        }
+
+        function initScene() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x87CEEB);
+            scene.fog = new THREE.Fog(0x87CEEB, 30, 90);
+
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
+            
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            document.body.appendChild(renderer.domElement);
+
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.7); 
+            scene.add(ambientLight);
+            const dirLight = new THREE.DirectionalLight(0xffffee, 1.3);
+            dirLight.position.set(20, 50, 30);
+            dirLight.castShadow = true;
+            
+            dirLight.shadow.camera.left = -20; dirLight.shadow.camera.right = 20;
+            dirLight.shadow.camera.top = 20; dirLight.shadow.camera.bottom = -20;
+            dirLight.shadow.mapSize.width = 1024; 
+            dirLight.shadow.mapSize.height = 1024;
+            scene.add(dirLight);
+
+            const groundMat = new THREE.MeshToonMaterial({ color: 0x77dd77 });
+            ground = new THREE.Mesh(new THREE.PlaneGeometry(2000, 2000), groundMat);
+            ground.rotation.x = -Math.PI / 2;
+            ground.position.y = -0.01;
+            ground.receiveShadow = true;
+            scene.add(ground);
+
+            gridHelper = new THREE.GridHelper(2000, 200, 0xffffff, 0xffffff);
+            gridHelper.material.opacity = 0.3;
+            gridHelper.material.transparent = true;
+            scene.add(gridHelper);
+
+            createRagdollCat();
+
+            window.addEventListener('resize', () => {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+            });
+        }
+
+        function createRagdollCat() {
+            const catGroup = new THREE.Group();
+            const creamMat = new THREE.MeshToonMaterial({ color: 0xfff0e0 }); 
+            const sealMat = new THREE.MeshToonMaterial({ color: 0x4a3020 });  
+            const blueEyeMat = new THREE.MeshToonMaterial({ color: 0x3399ff });
+            const noseMat = new THREE.MeshToonMaterial({ color: 0x332222 });   
+
+            const body = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.5, 0.9), creamMat);
+            body.position.y = 0.4; body.castShadow = true; catGroup.add(body);
+            const head = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.45, 0.5), creamMat);
+            head.position.set(0, 0.7, -0.5); head.castShadow = true; catGroup.add(head);
+            const maskGeo = new THREE.BoxGeometry(0.3, 0.25, 0.05);
+            const mask = new THREE.Mesh(maskGeo, sealMat);
+            mask.position.set(0, 0.68, -0.73); catGroup.add(mask);
+            const earGeo = new THREE.ConeGeometry(0.1, 0.2, 4);
+            const earL = new THREE.Mesh(earGeo, sealMat);
+            earL.position.set(-0.15, 0.95, -0.5); earL.rotation.y = -0.2; catGroup.add(earL);
+            const earR = new THREE.Mesh(earGeo, sealMat);
+            earR.position.set(0.15, 0.95, -0.5); earR.rotation.y = 0.2; catGroup.add(earR);
+            const tail = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.7), sealMat);
+            tail.position.set(0, 0.6, 0.6); tail.rotation.x = 0.6; catGroup.add(tail);
+            const eyeGeo = new THREE.BoxGeometry(0.08, 0.08, 0.06);
+            const eyeL = new THREE.Mesh(eyeGeo, blueEyeMat);
+            eyeL.position.set(-0.12, 0.75, -0.74); catGroup.add(eyeL);
+            const eyeR = new THREE.Mesh(eyeGeo, blueEyeMat);
+            eyeR.position.set(0.12, 0.75, -0.74); catGroup.add(eyeR);
+            const nose = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.04, 0.06), noseMat);
+            nose.position.set(0, 0.65, -0.74); catGroup.add(nose);
+
+            player = catGroup;
+            scene.add(player);
+        }
+
+        function createWhitePuppy() {
+            const dogGroup = new THREE.Group();
+            const whiteMat = new THREE.MeshToonMaterial({ color: 0xffffff }); 
+            const blackMat = new THREE.MeshToonMaterial({ color: 0x222222 });
+
+            const body = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.4, 0.6), whiteMat);
+            body.position.y = 0.3; body.castShadow = true; dogGroup.add(body);
+            const head = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.5, 0.5), whiteMat);
+            head.position.set(0, 0.65, -0.3); head.castShadow = true; dogGroup.add(head);
+            const earGeo = new THREE.BoxGeometry(0.15, 0.35, 0.25);
+            const earL = new THREE.Mesh(earGeo, whiteMat);
+            earL.position.set(-0.3, 0.65, -0.3); earL.rotation.z = 0.3; dogGroup.add(earL);
+            const earR = new THREE.Mesh(earGeo, whiteMat);
+            earR.position.set(0.3, 0.65, -0.3); earR.rotation.z = -0.3; dogGroup.add(earR);
+            const eyeGeo = new THREE.BoxGeometry(0.07, 0.07, 0.05);
+            const eyeL = new THREE.Mesh(eyeGeo, blackMat);
+            eyeL.position.set(-0.12, 0.7, -0.53); dogGroup.add(eyeL);
+            const eyeR = new THREE.Mesh(eyeGeo, blackMat);
+            eyeR.position.set(0.12, 0.7, -0.53); dogGroup.add(eyeR);
+            const nose = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.06, 0.05), blackMat);
+            nose.position.set(0, 0.6, -0.53); dogGroup.add(nose);
+            const tail = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.2), whiteMat);
+            tail.position.set(0, 0.45, 0.3); tail.rotation.x = 0.5; dogGroup.add(tail);
+
+            return dogGroup;
+        }
+
+        function startGame() {
+            playSound('sfx-start');
+            playMusic('bgm');
+            document.getElementById('start-screen').classList.add('hidden');
+            document.getElementById('game-over-screen').classList.add('hidden');
+            document.getElementById('hud').classList.remove('hidden');
+            resetGame();
+            gameActive = true;
+            animate();
+        }
+
+        function resetGame() {
+            obstacles.forEach(obs => scene.remove(obs));
+            obstacles = [];
+            
+            if(player) { 
+                player.position.set(0, 0, 0); 
+                player.rotation.set(0, 0, 0); 
+            }
+            score = 0; 
+            nextSpawnZ = -50; 
+            const setting = difficultySettings[currentDifficulty];
+            speed = setting.startSpeed;
+            camera.position.set(0, 3.5, 8);
+            document.getElementById('new-record-hint').style.display = 'none';
+        }
+
+        function animate() {
+            if (!gameActive) return;
+            animationId = requestAnimationFrame(animate);
+            if (!player) return;
+
+            const time = clock.getElapsedTime();
+            const setting = difficultySettings[currentDifficulty];
+
+            player.position.z -= speed;
+            speed += setting.acc;
+
+            if (keys.ArrowLeft) player.position.x -= 0.2;
+            if (keys.ArrowRight) player.position.x += 0.2;
+            player.position.x = Math.max(-4.5, Math.min(4.5, player.position.x));
+
+            player.position.y = Math.abs(Math.sin(time * 12)) * 0.2;
+            player.rotation.z = Math.sin(time * 15) * 0.05; 
+            player.rotation.y = Math.sin(time * 10) * 0.05; 
+
+            camera.position.z = player.position.z + 8;
+            camera.position.x = player.position.x * 0.6;
+            
+            if(gridHelper) gridHelper.position.z = Math.floor(player.position.z / 10) * 10;
+            if(ground) ground.position.z = player.position.z;
+
+            if (player.position.z < nextSpawnZ + 40) spawnObstacle(setting.spawnDist);
+
+            for (let i = obstacles.length - 1; i >= 0; i--) {
+                const obs = obstacles[i];
+                
+                const collisionX = obs.userData.collisionX || 0.9; 
+                const collisionZ = obs.userData.collisionZ || 1.0; 
+
+                if (Math.abs(obs.position.z - player.position.z) < collisionZ && 
+                    Math.abs(obs.position.x - player.position.x) < collisionX) {
+                    gameOver();
+                }
+                
+                if (obs.position.z > player.position.z + 10) {
+                    scene.remove(obs);
+                    obstacles.splice(i, 1);
+                }
+            }
+
+            score = -Math.floor(player.position.z);
+            document.getElementById('score-display').innerText = `SCORE: ${score}`;
+            renderer.render(scene, camera);
+        }
+
+        function spawnObstacle(distGap) {
+            const dog = createWhitePuppy();
+            dog.rotation.y = Math.PI; 
+
+            const isBigDog = Math.random() < 0.15; 
+
+            if (isBigDog) {
+                const scale = 2.5 + Math.random() * 0.5; 
+                dog.scale.set(scale, scale, scale);
+                dog.position.x = (Math.random() - 0.5) * 6; 
+                dog.userData = { collisionX: 1.8, collisionZ: 1.5 };
+            } else {
+                const scale = 1.0 + Math.random() * 0.3;
+                dog.scale.set(scale, scale, scale);
+                dog.position.x = (Math.random() - 0.5) * 8;
+                dog.userData = { collisionX: 0.9, collisionZ: 1.0 };
+            }
+            
+            dog.position.z = nextSpawnZ;
+            scene.add(dog); 
+            obstacles.push(dog);
+            nextSpawnZ -= (distGap + (isBigDog ? 5 : 0) + Math.random() * 5);
+        }
+
+        function gameOver() {
+            gameActive = false; cancelAnimationFrame(animationId);
+            playSound('sfx-crash'); stopMusic('bgm');
+            if(player) { player.rotation.x = -Math.PI / 2; player.position.y = 0.3; }
+            const isNewRecord = saveScore(score);
+            if(isNewRecord) document.getElementById('new-record-hint').style.display = 'block';
+            document.getElementById('final-score').innerText = score;
+            document.getElementById('hud').classList.add('hidden');
+            document.getElementById('game-over-screen').classList.remove('hidden');
+        }
+
+        function returnToMenu() {
+            playSound('sfx-start'); 
+            document.getElementById('game-over-screen').classList.add('hidden');
+            document.getElementById('start-screen').classList.remove('hidden');
+            updateLeaderboardUI(); resetGame(); renderer.render(scene, camera);
+        }
+
+        function selectDifficulty(level, btnElement) {
+            currentDifficulty = level;
+            document.querySelectorAll('.diff-btn').forEach(btn => btn.classList.remove('selected'));
+            if(btnElement) btnElement.classList.add('selected');
+        }
+
+        function switchLeaderboardTab(level, tabElement) {
+            leaderboardTab = level;
+            document.querySelectorAll('.lb-tab').forEach(tab => tab.classList.remove('active'));
+            if(tabElement) tabElement.classList.add('active');
+            updateLeaderboardUI();
+        }
+
+        function playSound(id) {
+            const audio = document.getElementById(id);
+            if(audio) { audio.currentTime = 0; audio.play().catch(e => {}); }
+        }
+        function playMusic(id) {
+            const audio = document.getElementById(id);
+            if(audio) { audio.volume = 0.5; audio.play().catch(e => {}); }
+        }
+        function stopMusic(id) {
+            const audio = document.getElementById(id);
+            if(audio) { audio.pause(); audio.currentTime = 0; }
+        }
+
+        function saveScore(newScore) {
+            if(newScore === 0) return false;
+            let history = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+            const dateStr = new Date().toLocaleDateString();
+            const currentDiffBest = history
+                .filter(item => item.diff === currentDifficulty)
+                .reduce((max, item) => Math.max(max, item.score), 0);
+            const isNewRecord = newScore > currentDiffBest;
+            history.push({ score: newScore, date: dateStr, diff: currentDifficulty });
+            if (history.length > 200) history = history.slice(history.length - 200);
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(history));
+            return isNewRecord;
+        }
+
+        function updateLeaderboardUI() {
+            const history = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+            const listEl = document.getElementById('leaderboard-list');
+            let filteredHistory = history.filter(item => item.diff === leaderboardTab);
+            filteredHistory.sort((a, b) => b.score - a.score);
+            if (filteredHistory.length === 0) {
+                listEl.innerHTML = '<div style="text-align:center;color:#999;padding:20px;">该难度暂无记录<br>快去挑战吧!</div>';
+                return;
+            }
+            let html = '';
+            filteredHistory.slice(0, 10).forEach((item, index) => {
+                const rankIcon = index === 0 ? '🥇' : (index === 1 ? '🥈' : (index === 2 ? '🥉' : index + 1 + '.'));
+                html += `<div class="score-item"><span style="width: 130px;">${rankIcon} ${item.date}</span><span style="font-weight:bold; color:#336699;">${item.score}m</span></div>`;
+            });
+            listEl.innerHTML = html;
+        }
+    </script>
+</body>
+</html>
