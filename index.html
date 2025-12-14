@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Ragdoll vs White Dog (Audio Fix V15.4)</title>
+    <title>Ragdoll vs White Dog (Audio V15.5)</title>
     <style>
         body { margin: 0; overflow: hidden; background-color: #87CEEB; font-family: 'Comic Sans MS', 'Arial Rounded MT Bold', sans-serif; user-select: none; touch-action: none; }
         
@@ -108,12 +108,10 @@
 
     <div id="start-screen" class="ui-screen">
         <h1>猫狗大作战</h1>
-        
         <div id="player-badge">👤 身份: <span id="player-name-display">...</span></div>
-
         <div id="loading-text">正在初始化游戏引擎...</div>
+        
         <div id="menu-content" style="display:none; text-align:center;">
-            
             <div style="color: #336699; margin-bottom: 5px; font-weight: bold;">选择难度</div>
             <div class="difficulty-group">
                 <button id="btn-easy" class="diff-btn selected">🐣 简单</button>
@@ -176,8 +174,7 @@
         
         let playerName = "Player";
         let touchStartX = 0;
-        let audioUnlocked = false; // ★ 标记音频是否已解锁
-
+        
         let currentDifficulty = 'easy';
         let leaderboardTab = 'easy'; 
 
@@ -226,46 +223,53 @@
             document.getElementById('btn-start').addEventListener('click', startGame);
             document.getElementById('btn-restart').addEventListener('click', returnToMenu);
             
-            document.addEventListener('keydown', e => keys[e.code] = true);
+            document.addEventListener('keydown', e => {
+                keys[e.code] = true;
+                // 键盘按下时也尝试播放BGM
+                tryPlayBgm();
+            });
             document.addEventListener('keyup', e => keys[e.code] = false);
 
             document.addEventListener('touchstart', handleTouchStart, {passive: false});
             document.addEventListener('touchmove', handleTouchMove, {passive: false});
             document.addEventListener('touchend', handleTouchEnd);
 
-            // ★★★ 核心修复：监听任意点击或触摸，强制解锁音频 ★★★
-            document.body.addEventListener('touchstart', unlockAudio, { once: true });
-            document.body.addEventListener('click', unlockAudio, { once: true });
-
             updateLeaderboardUI();
         }
 
-        // ★★★ 音频解锁函数 ★★★
-        function unlockAudio() {
-            if (audioUnlocked) return;
-            const sounds = ['bgm', 'sfx-start', 'sfx-crash'];
-            sounds.forEach(id => {
-                const audio = document.getElementById(id);
-                if(audio) {
-                    // 播放一瞬间然后暂停，告诉浏览器“用户允许了”
-                    audio.volume = 0; // 先静音
-                    audio.play().then(() => {
-                        audio.pause();
-                        audio.currentTime = 0;
-                        // 恢复音量 (BGM小一点)
-                        if(id === 'bgm') audio.volume = 0.5;
-                        else audio.volume = 1.0;
-                    }).catch(e => {
-                        console.log("Audio unlock waiting...");
+        // ★★★ 核心修复：强力音频播放逻辑 ★★★
+        
+        function forcePlaySound(id, volume = 1.0) {
+            const audio = document.getElementById(id);
+            if (audio) {
+                audio.currentTime = 0;
+                audio.volume = volume;
+                const playPromise = audio.play();
+                if (playPromise !== undefined) {
+                    playPromise.catch(error => {
+                        console.log(`Audio ${id} play prevented by browser.`);
                     });
                 }
-            });
-            audioUnlocked = true;
+            }
+        }
+
+        function tryPlayBgm() {
+            const bgm = document.getElementById('bgm');
+            // 如果BGM暂停了，尝试播放
+            if(bgm && bgm.paused) {
+                bgm.volume = 0.5;
+                bgm.play().catch(e => {
+                    // 如果失败，静默失败，等待下一次交互
+                });
+            }
         }
 
         function handleTouchStart(e) {
             if(!gameActive) return;
             touchStartX = e.touches[0].clientX;
+            
+            // ★★★ 核心：每次触摸屏幕都尝试唤醒BGM，直到成功 ★★★
+            tryPlayBgm();
         }
 
         function handleTouchMove(e) {
@@ -398,11 +402,10 @@
         }
 
         function startGame() {
-            // 确保再尝试一次解锁，以防万一
-            unlockAudio();
-            
-            playSound('sfx-start');
-            playMusic('bgm');
+            // 尝试播放所有音频
+            forcePlaySound('sfx-start');
+            tryPlayBgm();
+
             document.getElementById('start-screen').classList.add('hidden');
             document.getElementById('game-over-screen').classList.add('hidden');
             document.getElementById('hud').classList.remove('hidden');
@@ -466,127 +469,4 @@
                 }
                 
                 if (obs.position.z > player.position.z + 10) {
-                    scene.remove(obs);
-                    obstacles.splice(i, 1);
-                }
-            }
-
-            score = -Math.floor(player.position.z);
-            document.getElementById('score-display').innerText = `SCORE: ${score}`;
-            renderer.render(scene, camera);
-        }
-
-        function spawnObstacle(distGap) {
-            const dog = createWhitePuppy();
-            dog.rotation.y = Math.PI; 
-
-            const isBigDog = Math.random() < 0.15; 
-
-            if (isBigDog) {
-                const scale = 2.5 + Math.random() * 0.5; 
-                dog.scale.set(scale, scale, scale);
-                dog.position.x = (Math.random() - 0.5) * 6; 
-                dog.userData = { collisionX: 1.8, collisionZ: 1.5 };
-            } else {
-                const scale = 1.0 + Math.random() * 0.3;
-                dog.scale.set(scale, scale, scale);
-                dog.position.x = (Math.random() - 0.5) * 8;
-                dog.userData = { collisionX: 0.9, collisionZ: 1.0 };
-            }
-            
-            dog.position.z = nextSpawnZ;
-            scene.add(dog); 
-            obstacles.push(dog);
-            nextSpawnZ -= (distGap + (isBigDog ? 5 : 0) + Math.random() * 5);
-        }
-
-        function gameOver() {
-            gameActive = false; cancelAnimationFrame(animationId);
-            playSound('sfx-crash'); stopMusic('bgm');
-            if(player) { player.rotation.x = -Math.PI / 2; player.position.y = 0.3; }
-            const isNewRecord = saveScore(score);
-            if(isNewRecord) document.getElementById('new-record-hint').style.display = 'block';
-            document.getElementById('final-score').innerText = score;
-            document.getElementById('hud').classList.add('hidden');
-            document.getElementById('game-over-screen').classList.remove('hidden');
-        }
-
-        function returnToMenu() {
-            playSound('sfx-start'); 
-            document.getElementById('game-over-screen').classList.add('hidden');
-            document.getElementById('start-screen').classList.remove('hidden');
-            updateLeaderboardUI(); resetGame(); renderer.render(scene, camera);
-        }
-
-        function selectDifficulty(level, btnElement) {
-            currentDifficulty = level;
-            document.querySelectorAll('.diff-btn').forEach(btn => btn.classList.remove('selected'));
-            if(btnElement) btnElement.classList.add('selected');
-        }
-
-        function switchLeaderboardTab(level, tabElement) {
-            leaderboardTab = level;
-            document.querySelectorAll('.lb-tab').forEach(tab => tab.classList.remove('active'));
-            if(tabElement) tabElement.classList.add('active');
-            updateLeaderboardUI();
-        }
-
-        function playSound(id) {
-            const audio = document.getElementById(id);
-            if(audio) { audio.currentTime = 0; audio.play().catch(e => {}); }
-        }
-        function playMusic(id) {
-            const audio = document.getElementById(id);
-            if(audio) { audio.volume = 0.5; audio.play().catch(e => {}); }
-        }
-        function stopMusic(id) {
-            const audio = document.getElementById(id);
-            if(audio) { audio.pause(); audio.currentTime = 0; }
-        }
-
-        function saveScore(newScore) {
-            if(newScore === 0) return false;
-            let history = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
-            const dateStr = new Date().toLocaleDateString();
-            const currentDiffBest = history
-                .filter(item => item.diff === currentDifficulty)
-                .reduce((max, item) => Math.max(max, item.score), 0);
-            const isNewRecord = newScore > currentDiffBest;
-            history.push({ 
-                score: newScore, 
-                date: dateStr, 
-                diff: currentDifficulty, 
-                name: playerName 
-            });
-            if (history.length > 200) history = history.slice(history.length - 200);
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(history));
-            return isNewRecord;
-        }
-
-        function updateLeaderboardUI() {
-            const history = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
-            const listEl = document.getElementById('leaderboard-list');
-            let filteredHistory = history.filter(item => item.diff === leaderboardTab);
-            filteredHistory.sort((a, b) => b.score - a.score);
-            if (filteredHistory.length === 0) {
-                listEl.innerHTML = '<div style="text-align:center;color:#999;padding:20px;">该难度暂无记录<br>快去挑战吧!</div>';
-                return;
-            }
-            let html = '';
-            filteredHistory.slice(0, 10).forEach((item, index) => {
-                const rankIcon = index === 0 ? '🥇' : (index === 1 ? '🥈' : (index === 2 ? '🥉' : index + 1 + '.'));
-                const nameDisplay = item.name || 'Anonymous';
-                const isMine = item.name === playerName ? 'mine' : '';
-                
-                html += `
-                    <div class="score-item ${isMine}">
-                        <span style="flex:1;">${rankIcon} ${nameDisplay}</span>
-                        <span style="font-weight:bold; color:#336699;">${item.score}m</span>
-                    </div>
-                `;
-            });
-            listEl.innerHTML = html;
-        }
-    </script>
-</body>
-</html>
+                    scene.remove
